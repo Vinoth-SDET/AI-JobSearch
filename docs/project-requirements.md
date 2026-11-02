@@ -14,18 +14,10 @@ Other information reported as available but not yet supplied:
 
 ### Candidate-provided details
 
-- Automation experience duration is candidate-provided as **8 years**; the source JSON's overall 12+ years total remains a separate claim.
-- Coforge employment chronology (the supplied JSON lists June 2022 to present; candidate confirmation is still pending)
-- Current residence is **Hosur, Tamil Nadu, India**; **Bengaluru** is a preferred work and relocation location, not the current residence.
-- Candidate-provided notice period: **Immediate**.
-- Candidate-provided compensation target: **32 LPA (INR, annual)**. Fixed/total CTC basis was not specified.
-- Candidate-provided preferred locations and relocation destinations: **Bengaluru, United Kingdom, Luxembourg, Germany, and Europe**.
-
-- Automation experience: **8 years** (candidate-confirmed; overall experience remains the separate 12+ years stated in the source profile).
-- Current residence: **Hosur, Tamil Nadu, India**.
-- Preferred work location: **Bengaluru, India**.
+- Automation experience duration: **8 years**; the source profile's 12+ years is overall experience.
+- Current residence: **Hosur, Tamil Nadu, India**; preferred work/relocation location: **Bengaluru, India**.
 - Notice period: **Immediate**.
-- Target compensation: **32 LPA, INR annually**. Fixed versus total compensation basis is unspecified.
+- Target compensation: **32 LPA, INR annually**; fixed vs. total compensation basis is unspecified.
 - Preferred locations/relocation destinations: **Bengaluru, United Kingdom, Luxembourg, Germany, and Europe**.
 
 These updates are saved locally in the candidate profile's confirmed-details overlay and kept separate from the imported resume-derived source.
@@ -38,7 +30,7 @@ The candidate said to ignore employment-gap explanations, resume metrics, and wh
 
 ### Search scope reported by the user
 
-- Primary location: India; Indian cities include Bengaluru and Hyderabad
+- Primary location: India; Bengaluru preferred; other cities in the source profile include Pune, Hyderabad, and Chennai
 - International locations: United Kingdom, Luxembourg, Germany, and broader Europe
 - Remote work: India-remote roles; verify whether remote vacancies accept candidates based in India
 - Primary roles: Senior QA Automation Engineer and Senior SDET
@@ -59,17 +51,19 @@ The candidate said to ignore employment-gap explanations, resume metrics, and wh
 | LinkedIn alternative | `valig` | Researched |
 | LinkedIn alternative | `curious_coder` | Researched |
 
-The reported strategy recommends LinkedIn as primary, Indeed as secondary, and Google Search for ATS discovery. These are research-stage recommendations only, not production integrations or endorsement of any actor's current access/compliance behavior. Import the original research, test outputs, actor input/output examples, and applicable site terms before implementing discovery.
+The reported strategy recommends LinkedIn as primary, Indeed as secondary, and Google Search for ATS discovery. These are research-stage recommendations only, not production integrations or endorsement of any actor's current access/compliance behavior. Import the original research, test outputs, Actor input/output examples, and applicable site terms before enabling production Actor integrations.
 
-### Discovery behavior required in a future phase
+Phase 5 now contains previewable, mocked discovery execution and persistence based on these Actor IDs. Their documented input names and current public pricing metadata were checked on 2026-11-02, but no live Actor run or output-dataset check was performed; output mappings remain inferred and community Actor behavior can change. The platform implements independent HTTPS URL reachability checks for posting and application URLs, but does not confirm vacancy validity, employer ownership, work authorization, or sponsorship. Live execution remains disabled by default; see [architecture and API](architecture.md#phase-5-job-discovery-agent-in-progress).
 
-- Detect duplicate and reposted vacancies
-- Verify and retain the original employer application URL
-- Exclude expired vacancies
-- Distinguish India-eligible remote jobs from country-restricted remote roles
-- Extract salary and employment type when available
-- Record source actor, execution ID, and retrieval timestamp
-- Keep visa-sponsorship verification separate from vacancy discovery
+### Discovery behavior and limitations
+
+- Duplicate and reposted observations are retained with a reference to the first record; matching uses normalized URLs and title/company/location.
+- Original posting and application URLs are retained and can be checked for public HTTPS reachability; this is not proof of an active vacancy or employer ownership.
+- Expired listings with explicit actor evidence or past expiration dates are excluded from saved results.
+- Remote listings are labeled eligible only when India eligibility is explicit, restricted for recognized country-only restrictions, otherwise unknown; this heuristic does not determine legal work eligibility.
+- Salary and employment type are extracted when present in Actor output.
+- Source Actor, execution ID when returned, and retrieval timestamp are recorded.
+- Visa-sponsorship verification is not implemented and remains separate from discovery.
 
 ## Application workflow
 
@@ -95,7 +89,7 @@ Proposed defaults from the supplied summary; not yet confirmed:
 - Local development in VS Code
 - Python and FastAPI backend
 - SQLite initially; consider PostgreSQL if needed later
-- Apify API and Python SDK for future discovery integration
+- Apify API and Python SDK for discovery integration
 - Configurable Claude/OpenAI provider for future AI features; provider not selected
 - Playwright for future browser automation
 - Email notifications; provider and configuration not selected

@@ -8,7 +8,8 @@ A modular platform for candidate profile management and, in later phases, job di
 |---|---|---|
 | 1–3 | Manual preparation, research, and configuration | Completed manually; not software deliverables |
 | 4 | Candidate Profile Agent | JSON import, review workflow, API, and tests implemented; see [phase status](docs/phase-status.md) |
-| Future | Job discovery, matching, application materials, auto-apply, orchestration | Placeholders only; not implemented |
+| 5 | Job Discovery Agent | Preview, documented Actor inputs, mocked execution tests, persistence, and HTTPS reachability checks implemented; live Actor runs and URL checks not performed; see [phase status](docs/phase-status.md) |
+| Future | Matching, application materials, auto-apply, orchestration | Not implemented |
 
 ## Development
 
@@ -22,6 +23,8 @@ python -m uvicorn ai_job_search.main:app --reload
 ```
 
 The API is available at `http://127.0.0.1:8000`; interactive API documentation is at `/docs`. The SQLite database is created at `data/ai-job-search.sqlite3` by default. Set `DATABASE_PATH` to use another location.
+
+Copy `.env.example` to `.env` as a reference for local settings. The application reads environment variables from the process; `.env` is not loaded automatically. Live Apify execution requires `APIFY_TOKEN`, `JOB_DISCOVERY_ENABLED=true`, and an explicit request with `confirm_live_run=true` and a charge budget within the configured cap. Preview requests do not contact Apify.
 
 Run tests with:
 
