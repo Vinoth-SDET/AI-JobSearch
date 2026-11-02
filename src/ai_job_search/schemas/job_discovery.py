@@ -15,7 +15,6 @@ DiscoverySource = Literal["linkedin", "indeed", "google"]
 JobStatus = Literal[
     "discovered",
     "verification_pending",
-    "verified",
     "expired",
     "unavailable",
 ]
@@ -29,10 +28,17 @@ LocationMatch = Literal[
 ]
 URLStatus = Literal[
     "pending",
-    "verified",
+    "reachable",
     "expired",
     "unavailable",
     "not_provided",
+]
+VacancyAssessment = Literal["not_assessed", "open", "closed", "uncertain"]
+EmployerAssessment = Literal[
+    "not_assessed",
+    "confirmed",
+    "disputed",
+    "uncertain",
 ]
 
 
@@ -104,6 +110,8 @@ class JobPosting(BaseModel):
     expires_at: str | None = None
     is_expired: bool | None = None
     status: JobStatus = "discovered"
+    vacancy_assessment: VacancyAssessment = "not_assessed"
+    employer_authenticity_assessment: EmployerAssessment = "not_assessed"
     location_match: LocationMatch = "unknown"
     remote_eligibility: Literal[
         "eligible",
@@ -121,6 +129,8 @@ class JobPosting(BaseModel):
     verification_checked_at: datetime | None = None
     posting_url_status: URLStatus = "pending"
     application_url_status: URLStatus = "not_provided"
+    observed_sources: list[DiscoverySource] = Field(default_factory=list)
+    observed_posting_urls: list[HttpUrl] = Field(default_factory=list)
     posting_final_url: HttpUrl | None = None
     application_final_url: HttpUrl | None = None
     posting_http_status: int | None = Field(default=None, ge=100, le=599)
@@ -129,14 +139,27 @@ class JobPosting(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def migrate_legacy_verification_status(cls, value: object) -> object:
-        if not isinstance(value, dict) or "verification_status" not in value:
+        if not isinstance(value, dict):
             return value
         migrated = dict(value)
-        legacy_status = migrated.pop("verification_status")
-        if "status" not in migrated:
+        legacy_status = migrated.pop("verification_status", None)
+        if legacy_status is not None and "status" not in migrated:
             migrated["status"] = (
                 "expired" if legacy_status == "expired" else "discovered"
             )
+            if "posting_url_status" not in migrated:
+                migrated["posting_url_status"] = (
+                    "expired" if legacy_status == "expired" else "pending"
+                )
+        if migrated.get("status") == "verified":
+            migrated["status"] = "discovered"
+            migrated.setdefault("posting_url_status", "reachable")
+        elif migrated.get("status") == "unavailable":
+            migrated["status"] = "discovered"
+            migrated.setdefault("posting_url_status", "unavailable")
+        for field in ("posting_url_status", "application_url_status"):
+            if migrated.get(field) == "verified":
+                migrated[field] = "reachable"
         return migrated
     duplicate_of: int | None = None
     is_repost: bool = False

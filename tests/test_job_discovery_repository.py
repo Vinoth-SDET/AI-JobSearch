@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import datetime, timezone
 
@@ -57,7 +58,11 @@ def test_duplicate_detection_normalizes_tracking_and_matches_reposts(
     assert cross_source_duplicate.is_repost is False
     assert repost.duplicate_of == original.id
     assert repost.is_repost is True
-    assert repository.get_jobs().total == 3
+    canonical = repository.get_jobs().items[0]
+    assert repository.get_jobs().total == 1
+    assert canonical.observed_sources == ["linkedin", "indeed", "google"]
+    assert canonical.is_repost is True
+    assert len(canonical.observed_posting_urls) == 3
 
 
 def test_initialize_migrates_legacy_non_nullable_run_id(tmp_path) -> None:
@@ -110,11 +115,77 @@ def test_initialize_migrates_legacy_non_nullable_run_id(tmp_path) -> None:
     assert {run.actor_run_id for run in runs.items} == {"run-old", None}
 
 
+def test_initialize_collapses_legacy_duplicate_posting_rows(tmp_path) -> None:
+    repository = SQLiteJobDiscoveryRepository(tmp_path / "legacy-jobs.sqlite3")
+    repository.initialize()
+    postings = [
+        _posting(
+            source="linkedin",
+            source_url="https://jobs.example/role?utm_source=linkedin",
+        ),
+        _posting(
+            source="indeed",
+            actor_run_id="run-2",
+            source_url="https://jobs.example/role?trk=indeed",
+        ),
+    ]
+    with sqlite3.connect(repository.path) as connection:
+        for posting in postings:
+            title_key = repository._normalize(posting.title)
+            company_key = repository._normalize_company(posting.company or "")
+            location_key = repository._normalize(posting.location or "")
+            source_key = repository._normalize_url(str(posting.source_url))
+            identity_key = json.dumps(
+                (title_key, company_key, location_key),
+                separators=(",", ":"),
+            )
+            connection.execute(
+                """
+                INSERT INTO job_postings (
+                    title, company_key, location_key, source_key,
+                    title_company_location_key, source, actor_id,
+                    actor_run_id, retrieved_at, payload_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    title_key,
+                    company_key,
+                    location_key,
+                    source_key,
+                    identity_key,
+                    posting.source,
+                    posting.actor_id,
+                    posting.actor_run_id,
+                    posting.retrieved_at.isoformat(),
+                    json.dumps(posting.model_dump(mode="json", exclude={"id"})),
+                ),
+            )
+
+    repository.initialize()
+
+    jobs = repository.get_jobs()
+    assert jobs.total == 1
+    assert jobs.items[0].observed_sources == ["linkedin", "indeed"]
+    assert jobs.items[0].is_repost is False
+    assert len(jobs.items[0].observed_posting_urls) == 2
+
+
 def test_legacy_verification_payload_is_migrated() -> None:
     posting_data = _posting().model_dump(mode="json")
-    posting_data["verification_status"] = "pending"
+    posting_data["status"] = "verified"
+    posting_data["posting_url_status"] = "verified"
 
     posting = JobPosting.model_validate(posting_data)
 
     assert posting.status == "discovered"
-    assert "verification_status" not in posting.model_dump()
+    assert posting.posting_url_status == "reachable"
+
+    legacy_data = _posting().model_dump(mode="json")
+    legacy_data.pop("status")
+    legacy_data.pop("posting_url_status")
+    legacy_data["verification_status"] = "pending"
+    legacy = JobPosting.model_validate(legacy_data)
+
+    assert legacy.status == "discovered"
+    assert legacy.posting_url_status == "pending"

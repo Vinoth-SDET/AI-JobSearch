@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlsplit
 
 from pydantic import HttpUrl
 
-VerificationStatus = Literal["verified", "expired", "unavailable"]
+VerificationStatus = Literal["reachable", "expired", "unavailable"]
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ class SafePostingURLVerifier:
                 continue
             if 200 <= status < 300:
                 return URLVerification(
-                    status="verified",
+                    status="reachable",
                     http_status=status,
                     final_url=current_url,
                     evidence="The URL returned a successful HTTPS response.",

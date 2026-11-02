@@ -209,6 +209,7 @@ class ApifyActorExecutor:
 
 
 class JobDiscoveryAgent:
+    _INDEED_PRICE_PER_RESULT_USD = Decimal("0.005")
     _COUNTRY_CODES = {
         "germany": "de",
         "luxembourg": "lu",
@@ -435,6 +436,13 @@ class JobDiscoveryAgent:
             max_items = base + (offset < remainder)
             bounded_input = dict(actor_input)
             if source == "indeed":
+                max_items = min(
+                    max_items,
+                    int(
+                        allocation
+                        / self._INDEED_PRICE_PER_RESULT_USD
+                    ),
+                )
                 bounded_input["maxRows"] = max_items
             actor_previews.append(
                 ActorRunPreview(
@@ -520,7 +528,7 @@ class JobDiscoveryAgent:
 
         return self._repository.update_verification(
             posting_id,
-            status=posting_result.status,
+            status="discovered",
             checked_at=datetime.now(timezone.utc),
             posting_url_status=posting_result.status,
             application_url_status=(
@@ -629,13 +637,18 @@ class JobDiscoveryAgent:
             active_postings = [
                 posting for posting in postings if posting.is_expired is not True
             ]
-            saved = [
+            observed = [
                 self._repository.save_posting(posting)
                 for posting in active_postings
             ]
             duplicate_count = sum(
-                posting.duplicate_of is not None for posting in saved
+                posting.duplicate_of is not None for posting in observed
             )
+            saved = [
+                posting
+                for posting in observed
+                if posting.duplicate_of is None
+            ]
             result = JobDiscoveryRunResult(
                 source=actor_run.source,
                 actor_id=actor_run.actor_id,
@@ -654,7 +667,11 @@ class JobDiscoveryAgent:
         return JobDiscoveryResponse(
             preferences=preview.preferences,
             runs=run_results,
-            jobs=discovered,
+            jobs=[
+                self._repository.get_posting(posting.id)
+                for posting in discovered
+                if posting.id is not None
+            ],
         )
 
     def _build_actor_runs(
@@ -707,7 +724,11 @@ class JobDiscoveryAgent:
                             "indeed",
                             self._settings.indeed_actor_id,
                             {
-                                "country": location.country_code,
+                                "country": (
+                                    "uk"
+                                    if location.country_code == "gb"
+                                    else location.country_code
+                                ),
                                 "location": location.name,
                                 "query": query,
                                 "maxRows": 1,
@@ -951,6 +972,11 @@ class JobDiscoveryAgent:
             "job_title",
             "positionName",
         )
+        personal_info = item.get("personalInfo")
+        personal_info = (
+            personal_info if isinstance(personal_info, dict) else {}
+        )
+        title = title or cls._first_text(personal_info, "jobTitle")
         if not title:
             return None
         company = cls._first_text(
@@ -959,13 +985,13 @@ class JobDiscoveryAgent:
             "companyName",
             "employer",
             "sourceEmployerName",
-        )
+        ) or cls._first_text(personal_info, "companyName")
         location = cls._first_text(
             item,
             "location",
             "jobLocation",
             "formattedLocation",
-        )
+        ) or cls._first_text(personal_info, "location")
         location, structured_country = cls._location_details(
             item.get("location") if not isinstance(item.get("location"), str) else None,
             location,
@@ -976,7 +1002,7 @@ class JobDiscoveryAgent:
             "jobDescription",
             "descriptionText",
             "descriptionHtml",
-        )
+        ) or cls._first_text(personal_info, "rawText")
         source_url = cls._first_url(
             item,
             "url",
@@ -1003,6 +1029,8 @@ class JobDiscoveryAgent:
             "datePosted",
             "publishedAt",
             "datePublished",
+            "date",
+            "postedTime",
             "age",
         )
         expires_at = cls._first_text(

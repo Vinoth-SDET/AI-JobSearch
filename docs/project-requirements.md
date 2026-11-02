@@ -57,13 +57,15 @@ Phase 5 now contains previewable, mocked discovery execution and persistence bas
 
 ### Discovery behavior and limitations
 
-- Duplicate and reposted observations are retained with a reference to the first record; matching uses normalized URLs and title/company/location.
-- Original posting and application URLs are retained and can be checked for public HTTPS reachability; this is not proof of an active vacancy or employer ownership.
+- Duplicate and reposted observations share one canonical posting row; source names and distinct posting URLs are retained on that row. Matching uses normalized URLs and title/company/location.
+- Original posting and application URLs are retained and can be checked independently for public HTTPS reachability; this is not proof of an active vacancy or employer ownership.
 - Expired listings with explicit actor evidence or past expiration dates are excluded from saved results.
 - Remote listings are labeled eligible only when India eligibility is explicit, restricted for recognized country-only restrictions, otherwise unknown; this heuristic does not determine legal work eligibility.
 - Salary and employment type are extracted when present in Actor output.
 - Source Actor, execution ID when returned, and retrieval timestamp are recorded.
 - Visa-sponsorship verification is not implemented and remains separate from discovery.
+
+Phase 5.2 adds offline fixture-based acceptance checks for the current inferred LinkedIn, Indeed, and Google output shapes, plus a mocked API-to-SQLite flow. Vacancy availability and employer authenticity remain explicitly `not_assessed`; URL reachability is not used as a substitute.
 
 ## Application workflow
 

@@ -1,0 +1,39 @@
+{
+  "organicResults": [
+    {
+      "position": 1,
+      "title": "Senior QA Automation Engineer | Acme",
+      "url": "https://jobs.example/roles/qa-42?utm_source=google",
+      "description": "Build Java and Selenium automation for API and web products.",
+      "date": "Nov 1, 2026",
+      "personalInfo": {
+        "companyName": "Acme Inc.",
+        "jobTitle": "Senior QA Automation Engineer",
+        "location": "Bengaluru, India",
+        "rawText": "Senior QA Automation Engineer at Acme Inc. in Bengaluru, India"
+      }
+    },
+    {
+      "position": 2,
+      "title": "Remote SDET | Northstar",
+      "url": "https://jobs.example/roles/us-remote-sdet",
+      "description": "Remote, US only. Must reside in the United States.",
+      "personalInfo": {
+        "companyName": "Northstar",
+        "jobTitle": "Remote SDET",
+        "location": "Remote - US"
+      }
+    },
+    {
+      "position": 3,
+      "title": "QA Engineer | West Coast Systems",
+      "url": "https://jobs.example/roles/san-francisco-qa",
+      "description": "On-site quality engineering role in San Francisco.",
+      "personalInfo": {
+        "companyName": "West Coast Systems",
+        "jobTitle": "QA Engineer",
+        "location": "San Francisco, United States"
+      }
+    }
+  ]
+}

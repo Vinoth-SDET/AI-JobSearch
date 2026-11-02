@@ -1,0 +1,24 @@
+{
+  "title": "Senior QA Automation Engineer",
+  "companyName": "Acme Inc.",
+  "location": {
+    "city": "Bengaluru",
+    "country": "India",
+    "countryCode": "in",
+    "formattedAddressLong": "Bengaluru, India"
+  },
+  "jobUrl": "https://jobs.example/roles/qa-42?trk=indeed",
+  "applyUrl": "https://careers.example/acme/qa-42",
+  "descriptionText": "Build Java and Selenium automation for API and web products.",
+  "jobType": ["fulltime"],
+  "isRemote": false,
+  "salary": {
+    "salaryCurrency": "INR",
+    "salaryMin": 2000000,
+    "salaryMax": 3200000,
+    "salaryType": "yearly",
+    "salaryText": "INR 2,000,000 - 3,200,000 per year"
+  },
+  "datePublished": "2026-11-01",
+  "expired": false
+}

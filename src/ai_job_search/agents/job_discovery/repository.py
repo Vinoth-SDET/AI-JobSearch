@@ -123,6 +123,114 @@ class SQLiteJobDiscoveryRepository:
                     ON job_postings(source_key, title_company_location_key)
                     """
                 )
+                self._deduplicate_legacy_postings(connection)
+
+    @classmethod
+    def _deduplicate_legacy_postings(
+        cls,
+        connection: sqlite3.Connection,
+    ) -> None:
+        rows = connection.execute(
+            """
+            SELECT id, source_key, title_company_location_key, payload_json
+            FROM job_postings
+            ORDER BY id
+            """
+        ).fetchall()
+        canonical_ids: dict[str, int] = {}
+        canonical_payloads: dict[int, dict[str, object]] = {}
+        canonical_source_keys: dict[int, str] = {}
+
+        for row in rows:
+            source_key = row["source_key"]
+            identity_key = row["title_company_location_key"]
+            canonical_id = (
+                canonical_ids.get(f"url:{source_key}") if source_key else None
+            )
+            if canonical_id is None and identity_key != '["","",""]':
+                canonical_id = canonical_ids.get(f"identity:{identity_key}")
+
+            payload = json.loads(row["payload_json"])
+            if canonical_id is None:
+                canonical_id = row["id"]
+                observed_sources = payload.setdefault(
+                    "observed_sources",
+                    [payload["source"]],
+                )
+                if payload["source"] not in observed_sources:
+                    observed_sources.append(payload["source"])
+                observed_urls = payload.setdefault(
+                    "observed_posting_urls",
+                    (
+                        [payload["source_url"]]
+                        if payload.get("source_url")
+                        else []
+                    ),
+                )
+                if (
+                    payload.get("source_url")
+                    and payload["source_url"] not in observed_urls
+                ):
+                    observed_urls.append(payload["source_url"])
+                connection.execute(
+                    "UPDATE job_postings SET payload_json = ? WHERE id = ?",
+                    (json.dumps(payload), canonical_id),
+                )
+                canonical_payloads[canonical_id] = payload
+                canonical_source_keys[canonical_id] = source_key
+            else:
+                canonical = canonical_payloads[canonical_id]
+                observed_sources = canonical.setdefault(
+                    "observed_sources",
+                    [canonical["source"]],
+                )
+                for observed_source in [
+                    payload["source"],
+                    *payload.get("observed_sources", []),
+                ]:
+                    if observed_source not in observed_sources:
+                        observed_sources.append(observed_source)
+                observed_urls = canonical.setdefault(
+                    "observed_posting_urls",
+                    (
+                        [canonical["source_url"]]
+                        if canonical.get("source_url")
+                        else []
+                    ),
+                )
+                duplicate_urls = [
+                    *(
+                        [payload["source_url"]]
+                        if payload.get("source_url")
+                        else []
+                    ),
+                    *payload.get("observed_posting_urls", []),
+                ]
+                for observed_url in duplicate_urls:
+                    if observed_url not in observed_urls:
+                        observed_urls.append(observed_url)
+                is_repost = bool(
+                    source_key
+                    and canonical_source_keys[canonical_id] != source_key
+                )
+                canonical["is_repost"] = (
+                    canonical.get("is_repost", False)
+                    or payload.get("is_repost", False)
+                    or is_repost
+                )
+                connection.execute(
+                    "UPDATE job_postings SET payload_json = ? WHERE id = ?",
+                    (json.dumps(canonical), canonical_id),
+                )
+                connection.execute(
+                    "DELETE FROM job_postings WHERE id = ?",
+                    (row["id"],),
+                )
+
+            if source_key:
+                canonical_ids[f"url:{source_key}"] = canonical_id
+            if identity_key != '["","",""]':
+                canonical_ids[f"identity:{identity_key}"] = canonical_id
 
     def record_run(self, result: JobDiscoveryRunResult) -> None:
         with closing(self._connect()) as connection:
@@ -164,6 +272,10 @@ class SQLiteJobDiscoveryRepository:
 
     def save_posting(self, posting: JobPosting) -> JobPosting:
         serialized = posting.model_dump(mode="json", exclude={"id"})
+        serialized["observed_sources"] = [posting.source]
+        serialized["observed_posting_urls"] = (
+            [str(posting.source_url)] if posting.source_url else []
+        )
         title_key = self._normalize(posting.title)
         company_key = self._normalize_company(posting.company or "")
         location_key = self._normalize(posting.location or "")
@@ -182,7 +294,7 @@ class SQLiteJobDiscoveryRepository:
                 if source_key:
                     existing = connection.execute(
                         """
-                        SELECT id
+                        SELECT id, payload_json, source_key
                         FROM job_postings
                         WHERE source_key = ?
                         ORDER BY id
@@ -193,7 +305,7 @@ class SQLiteJobDiscoveryRepository:
                 if existing is None and all((title_key, company_key, location_key)):
                     existing = connection.execute(
                         """
-                        SELECT id
+                        SELECT id, payload_json, source_key
                         FROM job_postings
                         WHERE title_company_location_key = ?
                         ORDER BY id
@@ -203,20 +315,41 @@ class SQLiteJobDiscoveryRepository:
                     ).fetchone()
 
                 if existing is not None:
-                    serialized["duplicate_of"] = existing["id"]
-                    if source_key:
-                        canonical = connection.execute(
-                            """
-                            SELECT source_key
-                            FROM job_postings
-                            WHERE id = ?
-                            """,
-                            (existing["id"],),
-                        ).fetchone()
-                        serialized["is_repost"] = (
-                            canonical is not None
-                            and canonical["source_key"] != source_key
-                        )
+                    canonical = json.loads(existing["payload_json"])
+                    observed_sources = canonical.setdefault(
+                        "observed_sources",
+                        [canonical["source"]],
+                    )
+                    if posting.source not in observed_sources:
+                        observed_sources.append(posting.source)
+                    observed_urls = canonical.setdefault(
+                        "observed_posting_urls",
+                        (
+                            [canonical["source_url"]]
+                            if canonical.get("source_url")
+                            else []
+                        ),
+                    )
+                    source_url = str(posting.source_url) if posting.source_url else None
+                    if source_url and source_url not in observed_urls:
+                        observed_urls.append(source_url)
+                    is_repost = bool(
+                        source_key
+                        and existing["source_key"] != source_key
+                    )
+                    canonical["is_repost"] = (
+                        canonical.get("is_repost", False) or is_repost
+                    )
+                    connection.execute(
+                        "UPDATE job_postings SET payload_json = ? WHERE id = ?",
+                        (
+                            json.dumps(canonical),
+                            existing["id"],
+                        ),
+                    )
+                    canonical["duplicate_of"] = existing["id"]
+                    canonical["is_repost"] = is_repost
+                    return JobPosting.model_validate(canonical)
 
                 cursor = connection.execute(
                     """

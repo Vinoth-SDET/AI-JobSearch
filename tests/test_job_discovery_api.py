@@ -10,6 +10,7 @@ from ai_job_search.agents.job_discovery.verification import URLVerification
 from ai_job_search.main import create_app
 from ai_job_search.schemas.job_discovery import (
     JobDiscoveryRunRequest,
+    JobPosting,
     JobSearchLocation,
     JobSearchPreferences,
 )
@@ -135,23 +136,35 @@ def test_preview_builds_bounded_actor_inputs_without_running_actors(
             run["input"]["location"],
             run["max_items"],
             run["input"]["maxRows"],
+            Decimal(run["allocated_max_charge_usd"]),
         )
         for run in preview["actor_runs"]
         if run["source"] == "indeed"
     ]
     assert indeed == [
-        ("in", "Bengaluru", 4, 4),
-        ("gb", "London", 4, 4),
-        ("gb", "Manchester", 4, 4),
-        ("de", "Germany", 3, 3),
+        ("in", "Bengaluru", 2, 2, Decimal("0.01")),
+        ("uk", "London", 2, 2, Decimal("0.01")),
+        ("uk", "Manchester", 2, 2, Decimal("0.01")),
+        ("de", "Germany", 2, 2, Decimal("0.01")),
     ]
-    assert sum(run[2] for run in indeed) == 15
+    assert sum(run[2] for run in indeed) == 8
+    assert all(
+        Decimal(run[2]) * Decimal("0.005") <= run[4]
+        for run in indeed
+    )
     google = next(
         run for run in preview["actor_runs"] if run["source"] == "google"
+    )
+    google_uk = next(
+        run
+        for run in preview["actor_runs"]
+        if run["source"] == "google"
+        and run["input"].get("countryCode") == "gb"
     )
     assert google["input"]["maxPagesPerQuery"] == 1
     assert "site:greenhouse.io" in google["input"]["queries"]
     assert google["input"]["countryCode"] == "in"
+    assert google_uk["input"]["countryCode"] == "gb"
     assert google["input"]["aiOverview"]["scrapeFullAiOverview"] is False
     assert google["input"]["maximumLeadsEnrichmentRecords"] == 0
     assert google["input"]["websiteContentScraper"]["enable"] is False
@@ -272,7 +285,7 @@ def test_live_run_normalizes_jobs_and_marks_duplicates_and_expired(
                         evidence="The URL returned HTTP 404.",
                     )
                 return URLVerification(
-                    status="verified",
+                    status="reachable",
                     http_status=200,
                     final_url=str(url),
                     evidence="The URL returned HTTP 200.",
@@ -297,28 +310,30 @@ def test_live_run_normalizes_jobs_and_marks_duplicates_and_expired(
     assert response.status_code == 200
     result = response.json()
     assert result["runs"][0]["received_count"] == 3
-    assert result["runs"][0]["saved_count"] == 2
+    assert result["runs"][0]["saved_count"] == 1
     assert result["runs"][0]["duplicate_count"] == 1
     assert result["runs"][0]["expired_count"] == 1
     assert result["jobs"][0]["remote_eligibility"] == "eligible"
     assert result["jobs"][0]["status"] == "discovered"
     assert result["jobs"][0]["location_match"] == "remote"
     assert result["jobs"][0]["application_url"] == "https://careers.example/apply/1"
-    assert result["jobs"][1]["duplicate_of"] == result["jobs"][0]["id"]
-    assert result["jobs"][1]["is_repost"] is True
+    assert len(result["jobs"]) == 1
     assert persisted.status_code == 200
-    assert persisted.json()["total"] == 2
+    assert persisted.json()["total"] == 1
     assert persisted_runs.status_code == 200
     assert persisted_runs.json()["total"] == 1
     assert persisted_runs.json()["items"][0]["actor_run_id"] == "run-123"
     assert verify_response.status_code == 200
     verified = verify_response.json()
-    assert verified["status"] == "verified"
-    assert verified["posting_url_status"] == "verified"
+    assert verified["status"] == "discovered"
+    assert verified["posting_url_status"] == "reachable"
     assert verified["posting_http_status"] == 200
     assert verified["application_url_status"] == "unavailable"
     assert verified["application_http_status"] == 404
+    assert verified["vacancy_assessment"] == "not_assessed"
+    assert verified["employer_authenticity_assessment"] == "not_assessed"
     assert verified["verification_checked_at"] is not None
+    assert persisted.json()["items"][0]["is_repost"] is True
     assert all(
         posting["title"] != "Expired role"
         for posting in persisted.json()["items"]
@@ -603,3 +618,37 @@ def test_verifying_missing_posting_returns_not_found(tmp_path, monkeypatch) -> N
         response = client.post("/api/v1/jobs/999/verify")
 
     assert response.status_code == 404
+
+
+def test_http_gone_does_not_claim_vacancy_is_closed(tmp_path, monkeypatch) -> None:
+    with _client(tmp_path / "jobs.sqlite3", monkeypatch) as client:
+        agent = client.app.state.job_discovery_agent
+        posting = agent._repository.save_posting(
+            JobPosting(
+                title="Senior SDET",
+                remote_eligibility="unknown",
+                source="google",
+                actor_id="apify/google-search-scraper",
+                actor_run_id="gone-fixture",
+                source_url="https://jobs.example/gone-role",
+                retrieved_at=datetime.now(timezone.utc),
+            )
+        )
+
+        class GoneVerifier:
+            def verify(self, url):
+                return URLVerification(
+                    status="expired",
+                    http_status=410,
+                    final_url=str(url),
+                    evidence="Fixture URL returned HTTP 410.",
+                )
+
+        agent._url_verifier = GoneVerifier()
+        response = client.post(f"/api/v1/jobs/{posting.id}/verify")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "discovered"
+    assert response.json()["posting_url_status"] == "expired"
+    assert response.json()["vacancy_assessment"] == "not_assessed"
+    assert response.json()["employer_authenticity_assessment"] == "not_assessed"

@@ -8,7 +8,7 @@ A modular platform for candidate profile management and, in later phases, job di
 |---|---|---|
 | 1–3 | Manual preparation, research, and configuration | Completed manually; not software deliverables |
 | 4 | Candidate Profile Agent | JSON import, review workflow, API, and tests implemented; see [phase status](docs/phase-status.md) |
-| 5 | Job Discovery Agent | Preview, documented Actor inputs, mocked execution tests, persistence, and HTTPS reachability checks implemented; live Actor runs and URL checks not performed; see [phase status](docs/phase-status.md) |
+| 5 | Job Discovery Agent | Phase 5.2 fixture-based acceptance and mocked multi-source persistence checks implemented; live Actor runs and URL checks not performed; see [phase status](docs/phase-status.md) |
 | Future | Matching, application materials, auto-apply, orchestration | Not implemented |
 
 ## Development

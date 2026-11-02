@@ -20,7 +20,7 @@ def test_verifies_successful_url_after_redirect(monkeypatch) -> None:
     monkeypatch.setattr(verifier, "_request", fake_request)
     result = verifier.verify(HttpUrl("https://jobs.example/role"))
 
-    assert result.status == "verified"
+    assert result.status == "reachable"
     assert result.http_status == 200
     assert result.final_url == "https://careers.example/open-role"
     assert requests == [
@@ -40,7 +40,7 @@ def test_head_not_supported_falls_back_to_bounded_get(monkeypatch) -> None:
     monkeypatch.setattr(verifier, "_request", fake_request)
     result = verifier.verify(HttpUrl("https://jobs.example/role"))
 
-    assert result.status == "verified"
+    assert result.status == "reachable"
     assert methods == ["HEAD", "GET"]
 
 
